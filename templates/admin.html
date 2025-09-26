@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="messenger-wrap">
+  <div class="sidebar">
+    <div class="search-box">
+      <form method="POST">
+        <input type="hidden" name="action" value="search">
+        <input type="text" name="query" placeholder="Поиск пользователей...">
+      </form>
+    </div>
+    <div class="chats-list" id="users-list">
+      {% if users %}
+        {% for u in users %}
+          <a href="{{ url_for('admin_user', user_id=u[0]) }}">
+            <div class="chat-item">
+              <div class="chat-avatar" style="background: hsl({{ u[0] * 137 % 360 }}, 70%, 50%)">
+                {{ u[1][0]|upper }}
+              </div>
+              <div class="chat-meta">
+                <div class="chat-name">{{ u[1] }}</div>
+                <div class="chat-last">
+                  {% if u[3] %}
+                    Заблокирован {% if u[4] %}до {{ u[4] }}{% else %}навсегда{% endif %}
+                  {% else %}
+                    Активен
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="no-chats">Нет результатов</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-header">Админ-панель - Статистика</div>
+    <div class="messages">
+      <h3>Статистика</h3>
+      <p>Всего пользователей: {{ stats.total_users }}</p>
+      <p>Всего сообщений: {{ stats.total_messages }}</p>
+      <h3>Все пользователи</h3>
+      <div class="chats-list">
+        {% for u in all_users %}
+          <a href="{{ url_for('admin_user', user_id=u.id) }}">
+            <div class="chat-item">
+              <div class="chat-avatar" style="background: hsl({{ u.id * 137 % 360 }}, 70%, 50%)">
+                {{ u.username[0]|upper }}
+              </div>
+              <div class="chat-meta">
+                <div class="chat-name">{{ u.username }}</div>
+              </div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+{% endblock %}

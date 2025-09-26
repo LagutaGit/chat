@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="messenger-wrap">
+  <div class="sidebar">
+    <div class="chat-header">{{ username }} - Чаты</div>
+    <div class="chats-list">
+      {% if chats %}
+        {% for c in chats %}
+          <div class="chat-item" onclick="location.href='{{ url_for('admin_conversation', user_id=user_id, partner_id=c.id) }}'">
+            <div class="chat-avatar" style="background: hsl({{ c.id * 137 % 360 }}, 70%, 50%)">
+              {{ c.username[0]|upper }}
+            </div>
+            <div class="chat-meta">
+              <div class="chat-name">{{ c.username }}</div>
+              <div class="chat-last">{{ c.last_message }}</div>
+            </div>
+            <div class="chat-time">{{ c.time.split('.')[0] if c.time else '' }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="no-chats">Нет чатов</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-header">Выберите чат</div>
+    <div class="messages"></div>
+  </div>
+</div>
+
+{% endblock %}

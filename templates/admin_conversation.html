@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="messenger-wrap">
+  <div class="sidebar">
+    <div class="chat-header">{{ username }} - Чаты</div>
+    <div class="chats-list">
+      <a href="{{ url_for('admin_user_chats', user_id=user_id) }}">Назад к чатам</a>
+    </div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-header">{{ partner_name }}</div>
+    <div class="messages">
+      {% for m in messages %}
+        <div class="msg {% if m.sender_id == user_id %}msg-out{% else %}msg-in{% endif %}">
+          <div class="msg-bubble">
+            {% if m.message %}{{ m.message }}{% endif %}
+            {% if m.file_path %}
+              <a href="{{ url_for('download_file', message_id=m.id) }}" class="file-link">Файл: {{ m.file_path }}</a>
+            {% endif %}
+          </div>
+          <div class="msg-time">{{ m.timestamp.split('.')[0] if m.timestamp else '' }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

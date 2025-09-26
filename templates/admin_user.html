@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="messenger-wrap">
+  <div class="sidebar">
+    <div class="chat-header">Админ-панель</div>
+    <div class="chats-list">
+      <a href="{{ url_for('admin') }}" class="back-btn">Назад к статистике</a>
+    </div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-header">{{ username }}</div>
+    <div class="messages">
+      <div class="admin-actions">
+        <h3>Блокировка</h3>
+        {% if is_blocked %}
+          <p>Пользователь заблокирован {% if block_until %}до {{ block_until }}{% else %}навсегда{% endif %}</p>
+        {% endif %}
+        <form method="POST">
+          <input type="hidden" name="action" value="block">
+          <label><input type="checkbox" name="permanent"> Навсегда</label>
+          <input type="number" name="duration" placeholder="Часы" {% if is_blocked %}disabled{% endif %}>
+          <button type="submit" {% if is_blocked %}disabled{% endif %}>Заблокировать</button>
+        </form>
+      </div>
+      <div class="admin-actions">
+        <h3>Разблокировка</h3>
+        <form method="POST">
+          <input type="hidden" name="action" value="unblock">
+          <button type="submit" {% if not is_blocked %}disabled{% endif %}>Разблокировать</button>
+        </form>
+      </div>
+      <div class="admin-actions">
+        <h3>Изменение имени</h3>
+        <form method="POST">
+          <input type="hidden" name="action" value="change_name">
+          <input type="text" name="new_name" placeholder="Новое имя">
+          <button type="submit">Изменить</button>
+        </form>
+      </div>
+      <div class="admin-actions">
+        <h3>Удаление</h3>
+        <form method="POST" onsubmit="return confirm('Удалить пользователя?');">
+          <input type="hidden" name="action" value="delete">
+          <button type="submit">Удалить</button>
+        </form>
+      </div>
+      <div class="admin-actions">
+        <h3>Просмотр чатов</h3>
+        <a href="{{ url_for('admin_user_chats', user_id=user_id) }}" class="btn-primary">Просмотреть чаты</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+{% endblock %}

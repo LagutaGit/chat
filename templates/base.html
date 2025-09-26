@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>MyMessenger</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="navbar">
+    <div class="brand">MyMessenger</div>
+    {% if session.get('username') %}
+      <span>{{ session['username'] }}</span>
+      {% if session.get('is_admin') %}
+        <a href="{{ url_for('index') }}">Главное меню</a>
+        <a href="{{ url_for('admin') }}">Админ-панель</a>
+      {% endif %}
+      <a href="{{ url_for('logout') }}">Logout</a>
+    {% endif %}
+  </div>
+  {% block content %}{% endblock %}
+</body>
+</html>

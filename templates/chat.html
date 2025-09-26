@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="messenger-wrap">
+  <div class="sidebar">
+    <div class="search-box">
+      <input type="text" id="user-search" placeholder="Поиск пользователей...">
+    </div>
+    <div class="chats-list" id="chats-list">
+      {% if chats %}
+        {% for c in chats %}
+          <div class="chat-item" data-id="{{ c.id }}" onclick="selectChat({{ c.id }}, '{{ c.username }}')">
+            <div class="chat-avatar" style="background: hsl({{ c.id * 137 % 360 }}, 70%, 50%)">
+              {{ c.username[0]|upper }}
+            </div>
+            <div class="chat-meta">
+              <div class="chat-name">{{ c.username }}</div>
+              <div class="chat-last">{{ c.last_message }}</div>
+            </div>
+            <div class="chat-time">{{ c.time.split('.')[0] if c.time else '' }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="no-chats">Нет сообщений</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-header" id="chat-header">Выберите чат</div>
+    <div class="messages" id="messages"></div>
+    <div class="composer" id="composer" style="display:none">
+      <input type="text" id="message-input" placeholder="Напишите сообщение...">
+      <input type="file" id="file-input" style="display:none" accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.mp3,.mp4,.doc,.docx">
+      <button class="btn-upload" onclick="document.getElementById('file-input').click()">📎</button>
+      <button class="btn-send" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+</div>
+<div id="notification-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;"></div>
+
+<script>
+  const currentUserId = {{ session.user_id }};
+  let currentChatId = null;
+  let lastMessageTime = '';
+  let lastChatTimes = {};
+  let displayedMessages = new Set();
+
+  const notificationSound = new Audio('/static/sound/Notification.mp3');
+  const errorSound = new Audio('/static/sound/Error.mp3');
+  const messageSound = new Audio('/static/sound/Message.mp3');
+
+  function formatTime(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    console.log(`Raw timestamp: ${timestamp}, Converted: ${date.toISOString()}, Local: ${date.toLocaleString('ru-RU')}`);
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function showNotification(username, message) {
+    const notification = document.createElement('div');
+    notification.classList.add('notification', 'fade-in');
+    notification.innerHTML = `<strong>${username}</strong>: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`;
+    document.getElementById('notification-container').appendChild(notification);
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      setTimeout(() => notification.remove(), 300);
+    }, 5000);
+  }
+
+  function appendMessage(senderId, message, filePath, timestamp, messageId, animate = false) {
+    const messageKey = `${senderId}-${timestamp}-${message || filePath}`;
+    if (displayedMessages.has(messageKey)) return;
+    displayedMessages.add(messageKey);
+
+    const msgDiv = document.createElement('div');
+    msgDiv.classList.add('msg', senderId === currentUserId ? 'msg-out' : 'msg-in');
+    if (animate) msgDiv.classList.add('fade-in');
+    const bubble = document.createElement('div');
+    bubble.classList.add('msg-bubble');
+    if (message) {
+      const textDiv = document.createElement('div');
+      textDiv.textContent = message;
+      bubble.appendChild(textDiv);
+    }
+    if (filePath) {
+      const fileLink = document.createElement('a');
+      fileLink.href = `/download_file/${messageId}`;
+      fileLink.textContent = `Файл: ${filePath}`;
+      fileLink.classList.add('file-link');
+      bubble.appendChild(fileLink);
+    }
+    const timeDiv = document.createElement('div');
+    timeDiv.classList.add('msg-time');
+    timeDiv.textContent = formatTime(timestamp);
+    msgDiv.appendChild(bubble);
+    msgDiv.appendChild(timeDiv);
+    document.getElementById('messages').appendChild(msgDiv);
+    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+  }
+
+  function loadMessages(otherId) {
+    fetch(`/get_messages/${otherId}`)
+      .then(response => response.json())
+      .then(messages => {
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.innerHTML = '';
+        displayedMessages.clear();
+        messages.forEach(m => appendMessage(m.sender_id, m.message, m.file_path, m.timestamp, m.id));
+        if (messages.length > 0) {
+          lastMessageTime = messages[messages.length - 1].timestamp;
+        } else {
+          lastMessageTime = '';
+        }
+      })
+      .catch(() => {
+        errorSound.play();
+        alert('Ошибка загрузки сообщений');
+      });
+  }
+
+  function updateUserStatus() {
+    if (!currentChatId) return;
+    fetch(`/get_user_status/${currentChatId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.ok) {
+          let statusText = data.status === 'online' ? 'онлайн' : data.status === 'offline' ? 'оффлайн' : data.status.replace('last seen', 'последний раз в сети');
+          const statusClass = data.status === 'online' ? 'status-online' : 'status-offline';
+          const statusElem = document.getElementById('chat-status');
+          if (statusElem) {
+            statusElem.className = `user-status ${statusClass}`;
+            statusElem.textContent = statusText;
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
+  function pollNewMessages() {
+    if (currentChatId) {
+      fetch(`/get_messages/${currentChatId}`)
+        .then(response => response.json())
+        .then(messages => {
+          if (messages.length > 0) {
+            const latestTime = messages[messages.length - 1].timestamp;
+            if (latestTime > lastMessageTime) {
+              const newMessages = messages.filter(m => m.timestamp > lastMessageTime);
+              newMessages.forEach(m => {
+                appendMessage(m.sender_id, m.message, m.file_path, m.timestamp, m.id, true);
+              });
+              lastMessageTime = latestTime;
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    fetch('/chats')
+      .then(response => response.json())
+      .then(chats => {
+        let hasNewInOther = false;
+        chats.forEach(c => {
+          const prevTime = lastChatTimes[c.id] || '';
+          if (c.time > prevTime) {
+            lastChatTimes[c.id] = c.time;
+            if (c.id !== currentChatId) {
+              notificationSound.play();
+              showNotification(c.username, c.last_message);
+              hasNewInOther = true;
+            }
+          }
+        });
+        if (hasNewInOther) {
+          loadChats();
+        }
+      })
+      .catch(() => {});
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('message-input');
+    const message = input.value.trim();
+    if (!message || !currentChatId) return;
+
+    fetch('/send_message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receiver_id: currentChatId, message })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.ok) {
+          input.value = '';
+          messageSound.play();
+          loadMessages(currentChatId);
+          loadChats();
+        } else {
+          errorSound.play();
+          alert(data.error || 'Ошибка отправки');
+        }
+      })
+      .catch(() => {
+        errorSound.play();
+        alert('Ошибка отправки');
+      });
+  }
+
+  function uploadFile() {
+    const fileInput = document.getElementById('file-input');
+    const file = fileInput.files[0];
+    if (!file || !currentChatId) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('receiver_id', currentChatId);
+    const message = document.getElementById('message-input').value.trim();
+    if (message) formData.append('message', message);
+    fetch('/upload_file', {
+      method: 'POST',
+      body: formData
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.ok) {
+          document.getElementById('message-input').value = '';
+          fileInput.value = '';
+          messageSound.play();
+          loadMessages(currentChatId);
+          loadChats();
+        } else {
+          errorSound.play();
+          alert(data.error || 'Ошибка загрузки файла');
+        }
+      })
+      .catch(() => {
+        errorSound.play();
+        alert('Ошибка загрузки файла');
+      });
+  }
+
+  function selectChat(id, username) {
+    currentChatId = id;
+    document.getElementById('chat-header').innerHTML = `<div class="header-username">${username}</div><div id="chat-status" class="user-status"></div>`;
+    document.getElementById('composer').style.display = 'flex';
+    loadMessages(id);
+    updateUserStatus();
+  }
+
+  function loadChats() {
+    fetch('/chats')
+      .then(response => response.json())
+      .then(chats => {
+        const chatsList = document.getElementById('chats-list');
+        chatsList.innerHTML = '';
+        chats.forEach(c => {
+          const item = document.createElement('div');
+          item.classList.add('chat-item');
+          item.dataset.id = c.id;
+          item.onclick = () => selectChat(c.id, c.username);
+          item.innerHTML = `
+            <div class="chat-avatar" style="background: hsl(${c.id * 137 % 360}, 70%, 50%)">
+              ${c.username[0].toUpperCase()}
+            </div>
+            <div class="chat-meta">
+              <div class="chat-name">${c.username}</div>
+              <div class="chat-last">${c.last_message}</div>
+            </div>
+            <div class="chat-time">${formatTime(c.time)}</div>
+          `;
+          chatsList.appendChild(item);
+          lastChatTimes[c.id] = c.time || '';
+        });
+        if (chats.length === 0) {
+          chatsList.innerHTML = '<div class="no-chats">Нет сообщений</div>';
+        }
+      })
+      .catch(() => {
+        errorSound.play();
+      });
+  }
+
+  document.getElementById('user-search').addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    if (query.length < 2) {
+      loadChats();
+      return;
+    }
+    fetch('/search_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    })
+      .then(response => response.json())
+      .then(users => {
+        const chatsList = document.getElementById('chats-list');
+        chatsList.innerHTML = '';
+        users.forEach(u => {
+          const [id, username] = u;
+          const item = document.createElement('div');
+          item.classList.add('chat-item');
+          item.dataset.id = id;
+          item.onclick = () => selectChat(id, username);
+          item.innerHTML = `
+            <div class="chat-avatar" style="background: hsl(${id * 137 % 360}, 70%, 50%)">
+              ${username[0].toUpperCase()}
+            </div>
+            <div class="chat-meta">
+              <div class="chat-name">${username}</div>
+              <div class="chat-last">Начать чат</div>
+            </div>
+          `;
+          chatsList.appendChild(item);
+        });
+        if (users.length === 0) {
+          chatsList.innerHTML = '<div class="no-chats">Нет результатов</div>';
+        }
+      })
+      .catch(() => {
+        errorSound.play();
+      });
+  });
+
+  document.getElementById('message-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  document.getElementById('file-input').addEventListener('change', uploadFile);
+
+  setInterval(pollNewMessages, 3000);
+  setInterval(loadChats, 10000);
+  setInterval(updateUserStatus, 10000);
+  loadChats();
+</script>
+
+{% endblock %}
